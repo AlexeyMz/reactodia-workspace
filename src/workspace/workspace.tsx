@@ -4,6 +4,8 @@ import { hcl } from 'd3-color';
 import { shallowArrayEqual } from '../coreUtils/collections';
 import { Events, EventObserver, EventSource, EventTrigger } from '../coreUtils/events';
 import { HashMap } from '../coreUtils/hashMap';
+import type { TranslationBundle } from '../coreUtils/i18n';
+import { TranslationProvider, makeTranslation } from '../coreUtils/i18nProvider';
 
 import { ElementTypeIri } from '../data/model';
 import { MetadataProvider } from '../data/metadataProvider';
@@ -45,6 +47,10 @@ import { EntityElement } from '../workspace';
  * @see {@link Workspace}
  */
 export interface WorkspaceProps {
+    /**
+     * Provides a translation bundle for UI text strings in the workspace.
+     */
+    translation?: Partial<TranslationBundle>;
     /**
      * Overrides default command history implementation.
      *
@@ -136,6 +142,7 @@ export class Workspace extends React.Component<WorkspaceProps> {
         super(props);
 
         const {
+            translation: translationBundle = {},
             history = new InMemoryHistory(),
             metadataProvider,
             validationProvider,
@@ -148,11 +155,13 @@ export class Workspace extends React.Component<WorkspaceProps> {
             onWorkspaceEvent = () => {},
         } = this.props;
 
+        const translation = makeTranslation(translationBundle);
+
         this.resolveTypeStyle = typeStyleResolver ?? DEFAULT_TYPE_STYLE_RESOLVER;
         this.cachedTypeStyles = new WeakMap();
         this.cachedGroupStyles = new WeakMap();
 
-        const model = new DataDiagramModel({history, selectLabelLanguage});
+        const model = new DataDiagramModel({history, translation, selectLabelLanguage});
         model.setLanguage(defaultLanguage);
 
         const view = new SharedCanvasState({
@@ -164,6 +173,7 @@ export class Workspace extends React.Component<WorkspaceProps> {
 
         const editor = new EditorController({
             model,
+            translation,
             authoringCommands,
             metadataProvider,
             validationProvider,
@@ -172,6 +182,7 @@ export class Workspace extends React.Component<WorkspaceProps> {
         const overlay = new OverlayController({
             model,
             view,
+            translation,
         });
 
         this.layoutTypeProvider = {
@@ -188,6 +199,7 @@ export class Workspace extends React.Component<WorkspaceProps> {
             view,
             editor,
             overlay,
+            translation,
             disposeSignal: this.cancellation.signal,
             getElementStyle: this.getElementStyle,
             getElementTypeStyle: this.getElementTypeStyle,
@@ -218,9 +230,11 @@ export class Workspace extends React.Component<WorkspaceProps> {
     render() {
         const {children} = this.props;
         return (
-            <WorkspaceContext.Provider value={this.workspaceContext}>
-                {children}
-            </WorkspaceContext.Provider>
+            <TranslationProvider translation={this.workspaceContext.translation}>
+                <WorkspaceContext.Provider value={this.workspaceContext}>
+                    {children}
+                </WorkspaceContext.Provider>
+            </TranslationProvider>
         );
     }
 
@@ -318,7 +332,7 @@ export class Workspace extends React.Component<WorkspaceProps> {
             canvas: targetCanvas, layoutFunction, selectedElements, animate, signal,
             zoomToFit = true,
         } = params;
-        const {model, view, overlay, disposeSignal} = this.workspaceContext;
+        const {model, view, overlay, translation: t, disposeSignal} = this.workspaceContext;
 
         const canvas = targetCanvas ?? view.findAnyCanvas();
         if (!canvas) {
@@ -328,7 +342,7 @@ export class Workspace extends React.Component<WorkspaceProps> {
         canvas.renderingState.syncUpdate();
 
         const task = overlay.startTask({
-            title: 'Computing graph layout',
+            title: t.text('workspace.perform_layout.task'),
             delay: 200,
         });
         let calculatedLayout: CalculatedLayout;
@@ -349,7 +363,7 @@ export class Workspace extends React.Component<WorkspaceProps> {
             task.end();
         }
 
-        const batch = model.history.startBatch('Graph layout');
+        const batch = model.history.startBatch({titleKey: 'workspace.perform_layout.command'});
         batch.history.registerToUndo(RestoreGeometry.capture(model));
 
         for (const link of model.links) {
@@ -374,16 +388,28 @@ export class Workspace extends React.Component<WorkspaceProps> {
         }
     };
 
-    private onGroup: WorkspaceContext['group'] = ({elements, canvas}) => {
-        return groupEntitiesAnimated(elements, canvas, this.workspaceContext);
+    private onGroup: WorkspaceContext['group'] = async ({elements, canvas}) => {
+        const {model} = this.workspaceContext;
+        const batch = model.history.startBatch({titleKey: 'workspace.group_entities.command'});
+        const result = await groupEntitiesAnimated(elements, canvas, this.workspaceContext);
+        batch.store();
+        return result;
     };
 
-    private onUngroupAll: WorkspaceContext['ungroupAll'] = ({groups, canvas}) => {
-        return ungroupAllEntitiesAnimated(groups, canvas, this.workspaceContext);
+    private onUngroupAll: WorkspaceContext['ungroupAll'] = async ({groups, canvas}) => {
+        const {model} = this.workspaceContext;
+        const batch = model.history.startBatch({titleKey: 'workspace.ungroup_entities.command'});
+        const result = await ungroupAllEntitiesAnimated(groups, canvas, this.workspaceContext);
+        batch.store();
+        return result;
     };
 
-    private onUngroupSome: WorkspaceContext['ungroupSome'] = ({group, entities, canvas}) => {
-        return ungroupSomeEntitiesAnimated(group, entities, canvas, this.workspaceContext);
+    private onUngroupSome: WorkspaceContext['ungroupSome'] = async ({group, entities, canvas}) => {
+        const {model} = this.workspaceContext;
+        const batch = model.history.startBatch({titleKey: 'workspace.ungroup_entities.command'});
+        const result = await ungroupSomeEntitiesAnimated(group, entities, canvas, this.workspaceContext);
+        batch.store();
+        return result;
     };
 }
 

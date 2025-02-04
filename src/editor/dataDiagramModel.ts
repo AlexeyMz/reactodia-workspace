@@ -444,7 +444,9 @@ export class DataDiagramModel extends DiagramModel implements DataGraphStructure
             linkTypeVisibility,
         } = deserializeDiagram(diagram, {preloadedElements, markLinksAsLayoutOnly});
 
-        const batch = this.history.startBatch('Import layout');
+        const batch = this.history.startBatch({
+            titleKey: 'data_diagram_model.import_layout.command'
+        });
 
         for (const [linkTypeIri, visibility] of linkTypeVisibility) {
             this.setLinkVisibility(linkTypeIri, visibility);
@@ -559,7 +561,7 @@ export class DataDiagramModel extends DiagramModel implements DataGraphStructure
         let allowToCreate: boolean;
         const cancel = () => { allowToCreate = false; };
 
-        const batch = this.history.startBatch('Create loaded links');
+        const batch = this.history.startBatch();
         for (const linkModel of links) {
             // TODO: postpone creating link type until first render
             // the same way as with element types
@@ -586,6 +588,7 @@ export class DataDiagramModel extends DiagramModel implements DataGraphStructure
      * The operation puts a command to the {@link DiagramModel.history command history}.
      */
     createLinks(data: LinkModel): Array<RelationLink | RelationGroup> {
+        const {translation: t} = this;
         const sources = this.graph.getElements().filter((el): el is EntityElement | EntityGroup =>
             el instanceof EntityElement && el.iri === data.sourceId ||
             el instanceof EntityGroup && el.itemIris.has(data.sourceId)
@@ -594,7 +597,9 @@ export class DataDiagramModel extends DiagramModel implements DataGraphStructure
             el instanceof EntityElement && el.iri === data.targetId ||
             el instanceof EntityGroup && el.itemIris.has(data.targetId)
         );
-        const batch = this.history.startBatch('Create links');
+        const batch = this.history.startBatch({
+            titleKey: 'data_diagram_model.create_links.command',
+        });
         const links: Array<RelationLink | RelationGroup> = [];
         for (const source of sources) {
             for (const target of targets) {
@@ -739,7 +744,9 @@ export class DataDiagramModel extends DiagramModel implements DataGraphStructure
      * @see {@link ungroupSome}
      */
     group(entities: ReadonlyArray<EntityElement>): EntityGroup {
-        const batch = this.history.startBatch('Group entities');
+        const batch = this.history.startBatch({
+            titleKey: 'data_diagram_model.group_entities.command',
+        });
 
         const entityIds = new Set<ElementIri>();
         for (const entity of entities) {
@@ -801,7 +808,9 @@ export class DataDiagramModel extends DiagramModel implements DataGraphStructure
      * @see {@link ungroupSome}
      */
     ungroupAll(groups: ReadonlyArray<EntityGroup>): EntityElement[] {
-        const batch = this.history.startBatch('Ungroup entities');
+        const batch = this.history.startBatch({
+            titleKey: 'data_diagram_model.ungroup_entities.command',
+        });
 
         const ungrouped: EntityElement[] = [];
         const links = new Set<Link>();
@@ -853,7 +862,9 @@ export class DataDiagramModel extends DiagramModel implements DataGraphStructure
             return this.ungroupAll([group]);
         }
 
-        const batch = this.history.startBatch('Ungroup entities');
+        const batch = this.history.startBatch({
+            titleKey: 'data_diagram_model.ungroup_entities.command',
+        });
 
         const links = new Set<Link>();
         for (const link of this.getElementLinks(group)) {
@@ -899,7 +910,9 @@ export class DataDiagramModel extends DiagramModel implements DataGraphStructure
      * The operation puts a command to the {@link DiagramModel.history command history}.
      */
     regroupLinks(links: ReadonlyArray<RelationLink | RelationGroup>): void {
-        const batch = this.history.startBatch('Regroup relations');
+        const batch = this.history.startBatch({
+            titleKey: 'data_diagram_model.regroup_relations.command',
+        });
 
         for (const link of links) {
             this.removeLink(link.id);
@@ -1023,7 +1036,7 @@ class ExtendedLocaleFormatter extends DiagramLocaleFormatter implements DataGrap
  * @see {@link DataDiagramModel.requestElementData}
  */
 export function requestElementData(model: DataDiagramModel, elementIris: ReadonlyArray<ElementIri>): Command {
-    return Command.effect('Fetch element data', () => {
+    return Command.effect({titleKey: 'data_diagram_model.request_entities.command'}, () => {
         model.requestElementData(elementIris);
     });
 }
@@ -1039,7 +1052,7 @@ export function restoreLinksBetweenElements(
     model: DataDiagramModel,
     options: RequestLinksOptions = {}
 ): Command {
-    return Command.effect('Restore links between elements', () => {
+    return Command.effect({titleKey: 'data_diagram_model.request_relations.command'}, () => {
         model.requestLinks(options);
     });
 }
